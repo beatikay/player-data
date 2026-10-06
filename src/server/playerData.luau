@@ -52,7 +52,7 @@ function PlayerData.interface.new(player: Player): PlayerData
 	}
 
 	setmetatable(self, PlayerData.metatable)
-	return self
+	return self :: PlayerData
 end
 
 function PlayerData.interface:Init(player: Player)
@@ -89,7 +89,7 @@ end
 
 function PlayerData.schema.getPlayer(self: PlayerData): Player?
 	local id = table.find(PlayerData.store, self)
-	if not id then return end
+	if not id then return nil end
 	return Players:GetPlayerByUserId(id)
 end
 

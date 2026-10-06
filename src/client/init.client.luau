@@ -2,4 +2,4 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local _PlayerData = require(ReplicatedStorage.Shared.playerData)
+local PlayerData = require(ReplicatedStorage.Shared.playerData)

@@ -1,18 +1,16 @@
+--!strict
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local config = require(ReplicatedStorage.Shared.config)
 local Item = require(ReplicatedStorage.Shared.item)
 type item = Item.item
 
---events--------------------------------------------------------------------------------------------
-
 local events = ReplicatedStorage:WaitForChild("Events")
 
 local sendEvent: RemoteEvent = events:FindFirstChild("send") or error("no event found")
 
---local---------------------------------------------------------------------------------------------
-
-local function update(t: {}, changed: {})
+local function update(t: PlayerData|{[string]: any}, changed: {[string]: any})
 	for key, value: any in changed do
 		if typeof(value) == "table" then
 			update(t[key], value)
@@ -22,71 +20,35 @@ local function update(t: {}, changed: {})
 	end
 end
 
-----------------------------------------------------------------------------------------------------
-
 local PlayerData = {}
+PlayerData.__index = PlayerData
+local cache: PlayerData?
 
-PlayerData.cache = {}
-PlayerData.interface = {}
-PlayerData.schema = {}
-PlayerData.metatable = {}
+type PlayerDataObject = config.PlayerDataObject
 
-type PlayerDataObject = {
-	inventory: { item },
-	stats: {},
-	experience: number,
-	equipped: {},
-	settings: {},
-}
+export type PlayerData = setmetatable<PlayerDataObject, typeof(PlayerData)>
 
-export type PlayerData = typeof(setmetatable({} :: PlayerDataObject, {} :: typeof(PlayerData.metatable)))
+local function constructor(): PlayerData
+	local self = table.clone(config.playerDataDefault)
 
-----------------------------------------------------------------------------------------------------
-
-local init = false
-
-local function hasInit(): boolean
-	if #PlayerData.cache == 0 then
-		return true
-	end
-	return false
-end
-
---interface-----------------------------------------------------------------------------------------
-function PlayerData.interface.new(): PlayerData
-	local self = {
-		inventory = {},
-		stats = {},
-		experience = 0,
-		equipped = {},
-		settings = {},
-	}
-
-	setmetatable(self, PlayerData.metatable)
+	setmetatable(self, PlayerData)
+	self = self :: PlayerData
+	cache = self
 	return self
 end
 
-function PlayerData:Init()
-	PlayerData.cache = PlayerData.interface.new()
-
-	if config.debug then
-		print("client initialized")
-	end
+function PlayerData.get()
+	return cache or constructor()
 end
 
-----------------------------------------------------------------------------------------------------
-
-sendEvent.OnClientEvent:Connect(function(data)
-	if not init and hasInit() then
-		PlayerData:Init()
-		init = true
-	end
-
-	update(PlayerData.cache, data)
+local function received(data)
+	update(PlayerData.get(), data)
 
 	if config.debug then
 		print("client cache updated")
 	end
-end)
+end
 
-return PlayerData.interface
+sendEvent.OnClientEvent:Connect(received)
+
+return PlayerData
