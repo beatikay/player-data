@@ -4,123 +4,59 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
 
+local config = require(ReplicatedStorage.Shared.config)
 local PlayerDataStore = DataStoreService:GetDataStore("PlayerDataStore")
 
-local config = require(ReplicatedStorage.Shared.config)
-local Item = require(ReplicatedStorage.Shared.item)
-type item = Item.item
-
---events--------------------------------------------------------------------------------------------
-
-local events = Instance.new("Folder")
-events.Name = "Events"
-
-local sendEvent = Instance.new("RemoteEvent")
-sendEvent.Name = "send"
-sendEvent.Parent = events
-
-events.Parent = ReplicatedStorage
-
-----------------------------------------------------------------------------------------------------
-
 local PlayerData = {}
+PlayerData.__index = PlayerData
+local store = {} :: {[string]: PlayerData}
 
-PlayerData.store = {}
-PlayerData.interface = {}
-PlayerData.schema = {}
-PlayerData.metatable = {}
+type PlayerDataObject = config.PlayerDataObject
 
-type PlayerDataObject = {
-	inventory: { item },
-	stats: {},
-	experience: number,
-	equipped: {},
-	settings: {},
-	Level: number?,
-}
-export type PlayerData = typeof(setmetatable({} :: PlayerDataObject, {} :: typeof(PlayerData.metatable)))
+export type PlayerData = setmetatable<PlayerDataObject, typeof(PlayerData)>
 
---interface-----------------------------------------------------------------------------------------
+local function update(t: PlayerDataObject|{[string]: any}, changed: {[string]: any})
+	for key, value: any in changed do
+		if typeof(value) == "table" then
+			update(t[key], value)
+		else
+			t[key] = value
+		end
+	end
+end
 
-function PlayerData.interface.new(player: Player): PlayerData
-	local self = {
-		inventory = {},
-		stats = {},
-		experience = 0,
-		equipped = {},
-		settings = {},
-	}
+function PlayerData.new(data: {[string]: any}?): PlayerData
+	local self = table.clone(config.playerDataDefault) :: PlayerDataObject
 
-	setmetatable(self, PlayerData.metatable)
+    if data then
+        update(self, data)
+    end
+
+	setmetatable(self, PlayerData)
 	return self :: PlayerData
 end
 
-function PlayerData.interface:Init(player: Player)
-	local playerData = PlayerDataStore:GetAsync(tostring(player.UserId))
+local function fromDataStore(userId: number): PlayerData?
+    local success = pcall(Players.GetNameFromUserIdAsync, Players, userId)
+    if not success then
+        warn("invalid userid:", userId)
+        return nil
+    end
 
-	if not playerData then
-		playerData = PlayerData.interface.new(player)
-
-		if config.debug then
-			print("no prior data found for player " .. player.Name)
-		end
-	else
-		setmetatable(playerData, PlayerData.metatable)
-
-		if config.debug then
-			print("data found for player " .. player.Name)
-		end
-	end
-
-	PlayerData.store[player.UserId] = playerData :: PlayerData
-	sendEvent:FireClient(player, playerData)
+    local data = PlayerDataStore:GetAsync(tostring(userId))
+    return PlayerData.new(data)
 end
 
-function PlayerData.interface:Save(player: Player)
-	local playerData = PlayerData.store[player.UserId]
-	PlayerDataStore:SetAsync(tostring(player.UserId), playerData)
+function PlayerData.get(userId: number): PlayerData?
+    return store[tostring(userId)] or fromDataStore(userId)
+end
+
+function PlayerData:Save(player: Player)
+	PlayerDataStore:SetAsync(tostring(player.UserId), PlayerData.get(player.UserId))
 
 	if config.debug then
 		print("data saved for player " .. player.Name)
 	end
 end
 
---schema--------------------------------------------------------------------------------------------
-
-function PlayerData.schema.getPlayer(self: PlayerData): Player?
-	local id = table.find(PlayerData.store, self)
-	if not id then return nil end
-	return Players:GetPlayerByUserId(id)
-end
-
---metatable-----------------------------------------------------------------------------------------
-
-local functions = {
-	Level = function(self: PlayerData): number
-		return config.toLevel(self.experience)
-	end,
-}
-
-function PlayerData.metatable.__index(self: PlayerData, key: string)
-	if functions[key] then
-		return functions[key](self)
-	else
-		return PlayerData.schema[key]
-	end
-end
-
-----------------------------------------------------------------------------------------------------
-
-for _, player in Players:GetPlayers() do
-	PlayerData.interface:Init(player)
-end
-
-Players.PlayerAdded:Connect(function(player: Player)
-	PlayerData.interface:Init(player)
-end)
-
-Players.PlayerRemoving:Connect(function(player: Player)
-	PlayerData.interface:Save(player)
-end)
-
-return table.freeze(PlayerData.interface)
+return PlayerData

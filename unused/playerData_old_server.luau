@@ -1,0 +1,125 @@
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local DataStoreService = game:GetService("DataStoreService")
+
+local PlayerDataStore = DataStoreService:GetDataStore("PlayerDataStore")
+
+local config = require(ReplicatedStorage.Shared.config)
+type item = config.item
+
+--events--------------------------------------------------------------------------------------------
+
+local events = Instance.new("Folder")
+events.Name = "Events"
+
+local sendEvent = Instance.new("RemoteEvent")
+sendEvent.Name = "send"
+sendEvent.Parent = events
+
+events.Parent = ReplicatedStorage
+
+----------------------------------------------------------------------------------------------------
+
+local PlayerData = {}
+
+PlayerData.store = {}
+PlayerData.interface = {}
+PlayerData.schema = {}
+PlayerData.metatable = {}
+
+type PlayerDataObject = {
+	inventory: { item },
+	stats: {},
+	experience: number,
+	equipped: {},
+	settings: {},
+	Level: number?,
+}
+export type PlayerData = typeof(setmetatable({} :: PlayerDataObject, {} :: typeof(PlayerData.metatable)))
+
+--interface-----------------------------------------------------------------------------------------
+
+function PlayerData.interface.new(player: Player): PlayerData
+	local self = {
+		inventory = {},
+		stats = {},
+		experience = 0,
+		equipped = {},
+		settings = {},
+	}
+
+	setmetatable(self, PlayerData.metatable)
+	return self :: PlayerData
+end
+
+function PlayerData.interface:Init(player: Player)
+	local playerData = PlayerDataStore:GetAsync(tostring(player.UserId))
+
+	if not playerData then
+		playerData = PlayerData.interface.new(player)
+
+		if config.debug then
+			print("no prior data found for player " .. player.Name)
+		end
+	else
+		setmetatable(playerData, PlayerData.metatable)
+
+		if config.debug then
+			print("data found for player " .. player.Name)
+		end
+	end
+
+	PlayerData.store[player.UserId] = playerData :: PlayerData
+	sendEvent:FireClient(player, playerData)
+end
+
+function PlayerData.interface:Save(player: Player)
+	local playerData = PlayerData.store[player.UserId]
+	PlayerDataStore:SetAsync(tostring(player.UserId), playerData)
+
+	if config.debug then
+		print("data saved for player " .. player.Name)
+	end
+end
+
+--schema--------------------------------------------------------------------------------------------
+
+function PlayerData.schema.getPlayer(self: PlayerData): Player?
+	local id = table.find(PlayerData.store, self)
+	if not id then return nil end
+	return Players:GetPlayerByUserId(id)
+end
+
+--metatable-----------------------------------------------------------------------------------------
+
+local functions = {
+	Level = function(self: PlayerData): number
+		return config.toLevel(self.experience)
+	end,
+}
+
+function PlayerData.metatable.__index(self: PlayerData, key: string)
+	if functions[key] then
+		return functions[key](self)
+	else
+		return PlayerData.schema[key]
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+
+for _, player in Players:GetPlayers() do
+	PlayerData.interface:Init(player)
+end
+
+Players.PlayerAdded:Connect(function(player: Player)
+	PlayerData.interface:Init(player)
+end)
+
+Players.PlayerRemoving:Connect(function(player: Player)
+	PlayerData.interface:Save(player)
+end)
+
+return table.freeze(PlayerData.interface)

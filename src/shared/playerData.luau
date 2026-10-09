@@ -3,14 +3,12 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local config = require(ReplicatedStorage.Shared.config)
-local Item = require(ReplicatedStorage.Shared.item)
-type item = Item.item
 
 local events = ReplicatedStorage:WaitForChild("Events")
 
 local sendEvent: RemoteEvent = events:FindFirstChild("send") or error("no event found")
 
-local function update(t: PlayerData|{[string]: any}, changed: {[string]: any})
+local function update(t: PlayerDataObject|{[string]: any}, changed: {[string]: any})
 	for key, value: any in changed do
 		if typeof(value) == "table" then
 			update(t[key], value)
@@ -29,16 +27,19 @@ type PlayerDataObject = config.PlayerDataObject
 export type PlayerData = setmetatable<PlayerDataObject, typeof(PlayerData)>
 
 local function constructor(): PlayerData
-	local self = table.clone(config.playerDataDefault)
+	local self = table.clone(config.playerDataDefault) :: PlayerDataObject
 
 	setmetatable(self, PlayerData)
-	self = self :: PlayerData
 	cache = self
 	return self
 end
 
-function PlayerData.get()
-	return cache or constructor()
+function PlayerData.get(): PlayerData
+	local data = cache or constructor()
+	if config.debug then
+		print(data)
+	end
+	return data
 end
 
 local function received(data)

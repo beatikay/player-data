@@ -1,11 +1,12 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local Item = require(ReplicatedStorage.Shared.item)
-type item = Item.item
-
 local config = {}
 
 --config--------------------------------------------------------------------------------------------
+
+export type item = { --item type
+	id: number,
+	quantity: number,
+	durability: number?,
+}
 
 export type PlayerDataObject = { --player data type
 	inventory: { item? },
